@@ -14,7 +14,7 @@ const unsigned char PNG_BYTE_SIGNATURE[] = {0x89, 0x50, 0x4e, 0x47,
  *  else -- Failure
  *  */
 int check_png_file_signature(FILE *f) {
-  // Move to the beginning of the file.
+  /* Move to the beginning of the file. */
   unsigned char buffer[8];
   int i;
   fseek(f, 0, SEEK_SET);
