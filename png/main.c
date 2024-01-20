@@ -10,8 +10,8 @@ const unsigned char PNG_BYTE_SIGNATURE[] = {0x89, 0x50, 0x4e, 0x47,
 /* Check if the file at `f` has the correct
  * png byte signature.
  * RETURNS
- *  0 -- Success
- *  else -- Failure
+ *  0 -> Success
+ *  _ -> Failure
  *  */
 int check_png_file_signature(FILE *f) {
   /* Move to the beginning of the file. */
@@ -28,6 +28,9 @@ int check_png_file_signature(FILE *f) {
 
 typedef struct {
   unsigned int length;
+  char chunk_type[4];
+  char crc[4];
+  char *data;
 } Chunk;
 
 int parse_chunk(Chunk *chunk, FILE *f);
@@ -44,20 +47,45 @@ int main() {
     return EXIT_FAILURE;
   }
 
+  if (check_png_file_signature(f) != 0) {
+    fprintf(stderr, "File signature is incorrect for png\n.");
+    return EXIT_FAILURE;
+  }
+
   Chunk chunk;
   parse_chunk(&chunk, f);
+
+  char chunk_type[5];
+  memcpy(chunk_type, chunk.chunk_type, 4);
+  chunk_type[4] = '\0';
+  printf("Chunk type: %s\n", chunk_type);
 
   fclose(f);
   return EXIT_SUCCESS;
 }
 
 int parse_chunk(Chunk *chunk, FILE *f) {
-  char buffer[4];
-  if (fread(buffer, 4, 1, f) < 1) {
-    fprintf(stderr, "Error reading chunk\n");
+  char chunk_type[4], crc[4];
+  unsigned int length;
+  if (fread(&length, sizeof(unsigned int), 1, f) < 1) {
+    fprintf(stderr, "Error reading chunk length.\n");
     return -1;
   };
+  length = ntohl(length);
+  chunk->length = length;
 
-  memcpy(buffer, chunk, 4);
+  if (fread(chunk_type, sizeof(char), 4, f) < 4) {
+    fprintf(stderr, "Error reading chunk type.\n");
+    return -1;
+  }
+  memcpy(chunk->chunk_type, chunk_type, 4);
+
+  char *data = malloc(sizeof(char) * length);
+  printf("Chunk size is %i.\n", length);
+  if (fread(data, sizeof(char), length, f) < length) {
+    fprintf(stderr, "Error reading chunk data.\n");
+    free(data);
+    return -1;
+  }
   return 0;
 }
