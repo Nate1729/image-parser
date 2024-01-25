@@ -3,37 +3,34 @@
 #include <stdlib.h>
 #include <string.h>
 
-const char *FILE_NAME = "img/Icon14_09.png";
-const unsigned char PNG_BYTE_SIGNATURE[] = {0x89, 0x50, 0x4e, 0x47,
-                                            0x0d, 0x0a, 0x1a, 0x0a};
+#include "png_parser.h"
 
-/* Check if the file at `f` has the correct
- * png byte signature.
- * RETURNS
- *  0 -> Success
- *  _ -> Failure
- *  */
-int check_png_file_signature(FILE *f) {
-  /* Move to the beginning of the file. */
-  unsigned char buffer[8];
-  int i;
-  fseek(f, 0, SEEK_SET);
-  if (fread(buffer, 1, 8, f) < 8) {
-    fprintf(stderr, "Error: Issue reading file!\n");
-    return -1;
-  }
-
-  return memcmp(buffer, PNG_BYTE_SIGNATURE, 8);
-}
+const char *FILE_NAME = "image.png";
 
 typedef struct {
   unsigned int length;
-  char chunk_type[4];
-  char crc[4];
-  char *data;
-} Chunk;
+  char type[4];
+} ChunkHeader;
 
-int parse_chunk(Chunk *chunk, FILE *f);
+/* Read the length and type of the current chunk.
+ * Edits the `ChunkHeader` in-place.
+ * Returns 0 for success and 1 for failure.
+ * */
+int read_chunk_header(FILE *f, ChunkHeader *header) {
+  unsigned int raw_length;
+  if (fread(&raw_length, sizeof(unsigned int), 1, f) < 1) {
+    fprintf(stderr, "Error reading chunk header, at %ld.\n", ftell(f));
+    return 1;
+  }
+  header->length = ntohl(raw_length);
+
+  if (fread(header->type, sizeof(char), 4, f) < 4) {
+    fprintf(stderr, "Erro reading chunk header.\n");
+    return 1;
+  }
+
+  return 0;
+}
 
 int main() {
   FILE *f = fopen(FILE_NAME, "rb");
@@ -42,50 +39,47 @@ int main() {
     return EXIT_FAILURE;
   }
 
-  if (sizeof(unsigned int) != 4) {
-    fprintf(stderr, "Exiting early! Unsigned int error\n");
+  if (check_png_file_signature(f)) {
+    fprintf(stderr, "%s is not a valid png file.\n", FILE_NAME);
+    fclose(f);
     return EXIT_FAILURE;
   }
 
-  if (check_png_file_signature(f) != 0) {
-    fprintf(stderr, "File signature is incorrect for png\n.");
-    return EXIT_FAILURE;
-  }
+  ChunkHeader chunk_header;
+  ImageHeader image_header;
+  do {
+    if (read_chunk_header(f, &chunk_header)) {
+      fprintf(stderr, "Had problem reading chunk -- Exiting early.\n");
+      fclose(f);
+      return EXIT_FAILURE;
+    }
 
-  Chunk chunk;
-  parse_chunk(&chunk, f);
+    fprintf(stdout, "Chunk type: %.4s\n", chunk_header.type);
+    fprintf(stdout, "Chunk lenght: %i\n", chunk_header.length);
 
-  char chunk_type[5];
-  memcpy(chunk_type, chunk.chunk_type, 4);
-  chunk_type[4] = '\0';
-  printf("Chunk type: %s\n", chunk_type);
+    if (convert_char_to_chunk_type(chunk_header.type) == CHUNK_TYPE_IHDR) {
+
+      read_image_header_data(&image_header, f);
+      printf("Height: %u\nWidth: %u\n", image_header.height,
+             image_header.width);
+
+      /*Skipping CRC */
+      if (fseek(f, 4, SEEK_CUR)) {
+        fprintf(stderr, "Issue seeking file.\n");
+        fclose(f);
+        return EXIT_FAILURE;
+      }
+    } else {
+
+      if (fseek(f, chunk_header.length + 4, SEEK_CUR)) {
+        fprintf(stderr, "Error skipping over data.\n");
+        fclose(f);
+        return EXIT_FAILURE;
+      }
+    }
+
+  } while (convert_char_to_chunk_type(chunk_header.type) != CHUNK_TYPE_IEND);
 
   fclose(f);
   return EXIT_SUCCESS;
-}
-
-int parse_chunk(Chunk *chunk, FILE *f) {
-  char chunk_type[4], crc[4];
-  unsigned int length;
-  if (fread(&length, sizeof(unsigned int), 1, f) < 1) {
-    fprintf(stderr, "Error reading chunk length.\n");
-    return -1;
-  };
-  length = ntohl(length);
-  chunk->length = length;
-
-  if (fread(chunk_type, sizeof(char), 4, f) < 4) {
-    fprintf(stderr, "Error reading chunk type.\n");
-    return -1;
-  }
-  memcpy(chunk->chunk_type, chunk_type, 4);
-
-  char *data = malloc(sizeof(char) * length);
-  printf("Chunk size is %i.\n", length);
-  if (fread(data, sizeof(char), length, f) < length) {
-    fprintf(stderr, "Error reading chunk data.\n");
-    free(data);
-    return -1;
-  }
-  return 0;
 }

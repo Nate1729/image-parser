@@ -3,6 +3,20 @@
 
 #include <stdio.h>
 
+typedef struct {
+  unsigned int width;
+  unsigned int height;
+  unsigned char bit_depth;
+  unsigned char type;
+  unsigned char compression_method;
+  unsigned char filter_method;
+  unsigned char interlace_method;
+} ImageHeader;
+
+/* Read the image header data from the file
+ */
+int read_image_header_data(ImageHeader *image_header, FILE *f);
+
 /* Check if the file at `f` has the correct
  * png byte signature.
  * RETURNS

@@ -1,6 +1,7 @@
 
 #include "png_parser.h"
 
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,4 +48,18 @@ ChunkType convert_char_to_chunk_type(char *data) {
   } else {
     return CHUNK_TYPE_UNKNOWN;
   }
+}
+
+int read_image_header_data(ImageHeader *image_header, FILE *f) {
+  char data[13];
+  if (fread(data, 1, 13, f) < 13) {
+    fprintf(stderr, "Issue reading image header data.\n");
+    return 1;
+  }
+
+  memcpy(image_header, data, 13);
+  image_header->width = ntohl(image_header->width);
+  image_header->height = ntohl(image_header->height);
+
+  return 0;
 }
